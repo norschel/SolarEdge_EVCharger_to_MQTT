@@ -69,13 +69,16 @@ async def main() -> None:
     mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
     mqtt_topic = os.getenv("MQTT_TOPIC", "solaredge/ev")
 
-    mqtt_client = mqtt.Client()
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     mqtt_username = os.getenv("MQTT_USERNAME")
     mqtt_password = os.getenv("MQTT_PASSWORD")
     if mqtt_username:
         mqtt_client.username_pw_set(mqtt_username, mqtt_password)
 
-    mqtt_client.connect(mqtt_host, mqtt_port)
+    try:
+        mqtt_client.connect(mqtt_host, mqtt_port)
+    except Exception as err:  # noqa: BLE001
+        raise RuntimeError(f"Failed to connect to MQTT broker at {mqtt_host}:{mqtt_port}") from err
     mqtt_client.loop_start()
 
     try:
@@ -91,8 +94,7 @@ async def main() -> None:
                 try:
                     raw_devices = await solaredge_client.async_get_home_automation_devices()
                     payload = _build_payload(raw_devices)
-                    result = mqtt_client.publish(mqtt_topic, payload=payload, qos=1, retain=False)
-                    result.wait_for_publish()
+                    mqtt_client.publish(mqtt_topic, payload=payload, qos=1, retain=False)
                     _LOGGER.info("Published EV data to topic '%s'", mqtt_topic)
                 except Exception:  # noqa: BLE001
                     _LOGGER.exception("Failed to fetch/publish EV data")
